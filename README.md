@@ -23,6 +23,16 @@ nil
 36.0
 => (-> m (assoc "A1" 8) (get "C1"))
 16.0
+=> (defn mul [a b]
+     (-> m
+       (assoc "A1" a)
+       (assoc "B1" b)
+       (get "C1")))
+#'user/mul
+=> (mul 8 9)
+72.0
+=> (mul 7 6)
+42.0
 ```
 
 ## License
