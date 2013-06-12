@@ -1,7 +1,7 @@
 # spreadmap
 
 Evil Clojure library to turn Excel spreadsheets in
-persistent reactive associative structure.
+persistent reactive associative structures.
 
 ## Installation
 
