@@ -6,8 +6,12 @@ persistent reactive associative structures.
 ## Installation
 
 ```clj
-[net.cgrand/spreadmap "0.1.0"]
+[net.cgrand/spreadmap "0.1.1"]
 ```
+
+### What's new in 0.1.1?
+* Keys can be "A1" "Foo!A1" "CellName" ["Foo" "A1"] [0 0] ["Foo" 0 0] [0 0 0]
+* Dates are returned as j.u.Date instances
 
 ## Usage
 
