@@ -3,7 +3,8 @@
   (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory CellValue DateUtil]
     [org.apache.poi.ss.formula.eval ValueEval StringEval BoolEval NumberEval BlankEval]
     org.apache.poi.ss.formula.eval.forked.ForkedEvaluator
-    org.apache.poi.ss.formula.IStabilityClassifier))
+    org.apache.poi.ss.formula.IStabilityClassifier
+    [org.apache.poi.ss.util CellReference AreaReference]))
 
 (defprotocol ValueEvalable
   (value-eval [v]))
@@ -11,11 +12,33 @@
 (defprotocol Valueable
   (value [v]))
 
-(defn- canon [ref ^Workbook wb]
-  (let [^String cref (if (string? ref) ref (second ref))
-        cref (org.apache.poi.ss.util.CellReference. cref)
-        sname (if (string? ref) (-> wb (.getSheetAt 0) .getSheetName) (first ref))]
-    [sname (.getRow cref) (.getCol cref)]))
+(defn- canon
+  "Converts to a canonical cell ref [\"sheet\" row col]"
+  [ref ^Workbook wb]
+  (cond 
+    (string? ref) 
+    (recur
+      (if-let [name (.getName wb ref)]
+        (-> name .getRefersToFormula AreaReference. .getFirstCell)
+        (CellReference. ^String ref))
+      wb)
+    (instance? CellReference ref)
+    (let [^CellReference cref ref]
+      [(or (.getSheetName cref) (-> wb (.getSheetAt 0) .getSheetName))
+       (.getRow cref) (.getCol cref)])
+    (= 3 (count ref))
+    (let [[sheet row col] ref
+          sheet (if (number? sheet) (-> wb (.getSheetAt sheet) .getSheetName) sheet)] 
+      [sheet row col])
+    (string? (second ref))
+    (let [[sheet ^String ref] ref
+          cref (CellReference. ref)
+          sheet (if (number? sheet) (-> wb (.getSheetAt sheet) .getSheetName) sheet)] 
+      [sheet (.getRow cref) (.getCol cref)])
+    :else
+    (let [[row col] ref
+          sheet (-> wb (.getSheetAt 0) .getSheetName)] 
+      [sheet row col])))
 
 (defn- getter [^Workbook wb assocs]
   (let [evaluator
