@@ -10,7 +10,7 @@
   (value-eval [v]))
 
 (defprotocol Valueable
-  (value [v]))
+  (value [v wb cref]))
 
 (defn- canon
   "Converts to a canonical cell ref [\"sheet\" row col]"
@@ -47,8 +47,9 @@
                  (doseq [[[sname row col] v] assocs]
                    (.updateCell evaluator sname row col v))
                  evaluator))]
-    (fn [[sname row col]]
-      (value (.evaluate ^ForkedEvaluator @evaluator sname row col)))))
+    (fn [[sname row col :as cref]]
+      (value (.evaluate ^ForkedEvaluator @evaluator sname row col)
+        wb cref))))
 
 (declare ss)
 
@@ -88,16 +89,20 @@
 
 (extend-protocol Valueable
   StringEval
-  (value [v]
+  (value [v wb cref]
     (.getStringValue v))
   BoolEval
-  (value [v]
+  (value [v wb cref]
     (.getBooleanValue v))
   NumberEval
-  (value [v]
-    (.getNumberValue v))
+  (value [v ^Workbook wb [sname row col]]
+    (let [d (.getNumberValue v)]
+      (if (some-> wb (.getSheet sname) (.getRow row) (.getCell col)
+            DateUtil/isCellDateFormatted)
+        (DateUtil/getJavaDate d)
+        d)))
   BlankEval
-  (value [v] nil))
+  (value [v wb cref] nil))
 
 (extend-protocol ValueEvalable
   ValueEval
