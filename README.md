@@ -6,8 +6,12 @@ persistent reactive associative structures.
 ## Installation
 
 ```clj
-[net.cgrand/spreadmap "0.1.1"]
+[net.cgrand/spreadmap "0.1.2"]
 ```
+
+### What's new in 0.1.2?
+* Rewrite to get rid of the crippled ForkedEvaluator from POI.
+* It means XLSX are now supported as they should have been in the first place.
 
 ### What's new in 0.1.1?
 * Keys can be "A1" "Foo!A1" "CellName" ["Foo" "A1"] [0 0] ["Foo" 0 0] [0 0 0]
