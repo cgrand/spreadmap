@@ -1,13 +1,9 @@
 (ns net.cgrand.spreadmap
   (:require [clojure.java.io :as io])
-  (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory CellValue DateUtil]
-    [org.apache.poi.ss.formula.eval ValueEval StringEval BoolEval NumberEval BlankEval]
-    org.apache.poi.ss.formula.eval.forked.ForkedEvaluator
-    org.apache.poi.ss.formula.IStabilityClassifier
+  (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory CellValue DateUtil Cell]
+    [org.apache.poi.ss.formula.eval ValueEval StringEval BoolEval NumberEval BlankEval ErrorEval]
+    [org.apache.poi.ss.formula IStabilityClassifier EvaluationWorkbook EvaluationSheet EvaluationName EvaluationCell]
     [org.apache.poi.ss.util CellReference AreaReference]))
-
-(defprotocol ValueEvalable
-  (value-eval [v]))
 
 (defprotocol Valueable
   (value [v wb cref]))
@@ -40,23 +36,85 @@
           sheet (-> wb (.getSheetAt 0) .getSheetName)] 
       [sheet row col])))
 
-(defn- getter [^Workbook wb assocs]
-  (let [evaluator
-        (delay (let [evaluator
-                     (ForkedEvaluator/create wb IStabilityClassifier/TOTALLY_IMMUTABLE nil)]
-                 (doseq [[[sname row col] v] assocs]
-                   (.updateCell evaluator sname row col v))
-                 evaluator))]
+(defn- cell [^EvaluationSheet sheet row col v]
+  (reify
+    org.apache.poi.ss.formula.EvaluationCell
+    (getSheet [this] sheet)
+    (getCellType [this]
+        (cond
+          (instance? Boolean v) Cell/CELL_TYPE_BOOLEAN
+          (number? v) Cell/CELL_TYPE_NUMERIC
+          (string? v) Cell/CELL_TYPE_STRING
+          (nil? v) Cell/CELL_TYPE_BLANK))
+      (getNumericCellValue [this] (double v))
+      (getIdentityKey [this]
+        (-> sheet (.getCell row col) .getIdentityKey))
+      (getRowIndex [this] row)
+      (getBooleanCellValue [this] v)
+      #_(getErrorCellValue [this] )
+      (getStringCellValue [this] v)
+      (getColumnIndex [this] col)
+      #_(getCachedFormulaResultType [this] (.getCachedFormulaResultType cell))))
+
+(defprotocol SheetMisc
+  (sheet-index [sheet wb]))
+
+(extend-protocol SheetMisc
+  EvaluationSheet
+  (sheet-index [sheet ^EvaluationWorkbook wb]
+    (.getSheetIndex wb sheet)))
+
+(defn- sheet [^EvaluationSheet sht cells]
+  (reify
+     org.apache.poi.ss.formula.EvaluationSheet
+     (getCell [this row col] 
+       (if-let [kv (find cells [row col])]
+         (cell this row col (val kv))
+         (.getCell sht row col)))
+     SheetMisc
+     (sheet-index [this wb]
+       (sheet-index sht wb))))
+
+(defn- ^EvaluationWorkbook workbook [^EvaluationWorkbook wb assocs]
+  (reify EvaluationWorkbook
+    (getName [this G__3335 G__3336] (.getName wb G__3335 G__3336))
+    (getName [this G__3337] (.getName wb G__3337))
+    (getSheet [this idx] 
+      (if-let [cells (some-> this (.getSheetName idx) assocs)]
+        (sheet (.getSheet wb idx) cells)
+        (.getSheet wb idx)))
+    (getExternalName [this G__3339 G__3340] (.getExternalName wb G__3339 G__3340))
+    (^int getSheetIndex [this ^EvaluationSheet sheet] (sheet-index sheet wb))
+    (^int getSheetIndex [this ^String name] (.getSheetIndex wb name))
+    (getSheetName [this G__3343] (.getSheetName wb G__3343))
+    (resolveNameXText [this G__3344] (.resolveNameXText wb G__3344))
+    (getUDFFinder [this] (.getUDFFinder wb))
+    (convertFromExternSheetIndex [this G__3345] (.convertFromExternSheetIndex wb G__3345))
+    (getExternalSheet [this G__3346] (.getExternalSheet wb G__3346))
+    (getFormulaTokens [this G__3347] (.getFormulaTokens wb G__3347))))
+
+(defn- getter [wb assocs]
+  (let [ewb (workbook
+              (cond
+               (instance? org.apache.poi.xssf.usermodel.XSSFWorkbook wb)
+               (org.apache.poi.xssf.usermodel.XSSFEvaluationWorkbook/create wb)
+               (instance? org.apache.poi.hssf.usermodel.HSSFWorkbook wb)
+               (org.apache.poi.hssf.usermodel.HSSFEvaluationWorkbook/create wb))
+              assocs)
+        evaluator (org.apache.poi.ss.formula.WorkbookEvaluator.
+                    ewb IStabilityClassifier/TOTALLY_IMMUTABLE nil)]
     (fn [[sname row col :as cref]]
-      (value (.evaluate ^ForkedEvaluator @evaluator sname row col)
-        wb cref))))
+      (when-let [cell (some-> ewb (.getSheet (.getSheetIndex ewb ^String sname))
+                        (.getCell row col))]
+        (value (.evaluate evaluator cell) wb cref)))))
 
 (declare ss)
 
 (deftype SpreadSheet [^Workbook wb assocs g]
   clojure.lang.Associative
   (assoc [this ref v]
-    (ss wb (assoc assocs (canon ref wb) (value-eval v))))
+    (let [[sname row col] (canon ref wb)] 
+      (ss wb (assoc-in assocs [sname [row col]] v))))
   (containsKey [this ref]
     (boolean (.valAt this ref nil)))
   (entryAt [this ref]
@@ -66,7 +124,7 @@
   (cons [this x]
     (ss wb (into assocs
              (for [[ref v] (conj {} x)]
-               [(canon ref wb) (value-eval v)]))))
+               [(canon ref wb) v]))))
   (equiv [this that]
     ; should be: same master and same assocs
     (.equals this that))
@@ -74,10 +132,10 @@
   (valAt [this ref]
     (.valAt this ref nil))
   (valAt [this ref default]
-    (or (-> ref (canon wb) g) default)))
+    (or (@g (canon ref wb)) default)))
 
 (defn- ss [^Workbook wb assocs]
-  (SpreadSheet. wb assocs (getter wb assocs)))
+  (SpreadSheet. wb assocs (delay (getter wb assocs))))
 
 (defn spreadmap 
   "Creates a spreadmap from an Excel file, accepts same arguments as io/input-stream."
@@ -103,22 +161,3 @@
         d)))
   BlankEval
   (value [v wb cref] nil))
-
-(extend-protocol ValueEvalable
-  ValueEval
-  (value-eval [v] v)
-  String
-  (value-eval [v]
-    (StringEval. v))
-  Boolean
-  (value-eval [v]
-    (BoolEval/valueOf v))
-  Number
-  (value-eval [v]
-    (NumberEval. (double v)))
-  java.util.Date
-  (value-eval [v]
-    (NumberEval. (DateUtil/getExcelDate v)))
-  nil
-  (value-eval [v]
-    BlankEval/instance))
