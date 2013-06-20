@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io])
   (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory CellValue DateUtil Cell]
     [org.apache.poi.ss.formula.eval ValueEval StringEval BoolEval NumberEval BlankEval ErrorEval]
-    [org.apache.poi.ss.formula IStabilityClassifier EvaluationWorkbook EvaluationSheet EvaluationName EvaluationCell]
+    [org.apache.poi.ss.formula IStabilityClassifier EvaluationWorkbook EvaluationSheet EvaluationName EvaluationCell FormulaParser FormulaType]
     [org.apache.poi.ss.util CellReference AreaReference]))
 
 (defprotocol Valueable
@@ -36,40 +36,52 @@
           sheet (-> wb (.getSheetAt 0) .getSheetName)] 
       [sheet row col])))
 
-(defn- cell [^EvaluationSheet sheet row col v]
+(defprotocol CellMisc
+  (formula-tokens [cell wb]))
+
+(defprotocol SheetMisc
+  (sheet-index [sheet wb]))
+
+(extend-protocol CellMisc
+  EvaluationCell
+  (formula-tokens [cell ^EvaluationWorkbook wb]
+    (.getFormulaTokens wb cell)))
+
+(defn- cell [^EvaluationSheet sheet idx row col v]
   (reify
     org.apache.poi.ss.formula.EvaluationCell
     (getSheet [this] sheet)
     (getCellType [this]
-        (cond
-          (instance? Boolean v) Cell/CELL_TYPE_BOOLEAN
-          (number? v) Cell/CELL_TYPE_NUMERIC
-          (string? v) Cell/CELL_TYPE_STRING
-          (nil? v) Cell/CELL_TYPE_BLANK))
-      (getNumericCellValue [this] (double v))
-      (getIdentityKey [this]
-        (-> sheet (.getCell row col) .getIdentityKey))
-      (getRowIndex [this] row)
-      (getBooleanCellValue [this] v)
-      #_(getErrorCellValue [this] )
-      (getStringCellValue [this] v)
-      (getColumnIndex [this] col)
-      #_(getCachedFormulaResultType [this] (.getCachedFormulaResultType cell))))
-
-(defprotocol SheetMisc
-  (sheet-index [sheet wb]))
+      (cond
+        (instance? Boolean v) Cell/CELL_TYPE_BOOLEAN
+        (number? v) Cell/CELL_TYPE_NUMERIC
+        (string? v) Cell/CELL_TYPE_STRING
+        (nil? v) Cell/CELL_TYPE_BLANK
+        (:formula v) Cell/CELL_TYPE_FORMULA))
+    (getNumericCellValue [this] (double v))
+    (getIdentityKey [this] [idx row col])
+    (getRowIndex [this] row)
+    (getBooleanCellValue [this] v)
+    #_(getErrorCellValue [this] )
+    (getStringCellValue [this] v)
+    (getColumnIndex [this] col)
+    #_(getCachedFormulaResultType [this] (.getCachedFormulaResultType cell))
+    CellMisc
+    (formula-tokens [cell wb]
+      (FormulaParser/parse (:formula v) wb FormulaType/CELL 
+        idx))))
 
 (extend-protocol SheetMisc
   EvaluationSheet
   (sheet-index [sheet ^EvaluationWorkbook wb]
     (.getSheetIndex wb sheet)))
 
-(defn- sheet [^EvaluationSheet sht cells]
+(defn- sheet [^EvaluationSheet sht idx cells]
   (reify
      org.apache.poi.ss.formula.EvaluationSheet
      (getCell [this row col] 
        (if-let [kv (find cells [row col])]
-         (cell this row col (val kv))
+         (cell this idx row col (val kv))
          (.getCell sht row col)))
      SheetMisc
      (sheet-index [this wb]
@@ -81,7 +93,7 @@
     (getName [this G__3337] (.getName wb G__3337))
     (getSheet [this idx] 
       (if-let [cells (some-> this (.getSheetName idx) assocs)]
-        (sheet (.getSheet wb idx) cells)
+        (sheet (.getSheet wb idx) idx cells)
         (.getSheet wb idx)))
     (getExternalName [this G__3339 G__3340] (.getExternalName wb G__3339 G__3340))
     (^int getSheetIndex [this ^EvaluationSheet sheet] (sheet-index sheet wb))
@@ -91,7 +103,7 @@
     (getUDFFinder [this] (.getUDFFinder wb))
     (convertFromExternSheetIndex [this G__3345] (.convertFromExternSheetIndex wb G__3345))
     (getExternalSheet [this G__3346] (.getExternalSheet wb G__3346))
-    (getFormulaTokens [this G__3347] (.getFormulaTokens wb G__3347))))
+    (getFormulaTokens [this cell] (formula-tokens cell wb))))
 
 (defn- getter [wb assocs]
   (let [ewb (workbook
@@ -161,3 +173,5 @@
         d)))
   BlankEval
   (value [v wb cref] nil))
+
+(defn fm= [formula-string] {:formula formula-string})
