@@ -1,6 +1,7 @@
 (ns net.cgrand.spreadmap
   (:require [clojure.java.io :as io])
-  (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory CellValue DateUtil Cell]
+  (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory CellValue
+            DateUtil Cell Row Sheet]
     [org.apache.poi.ss.formula.eval ValueEval StringEval BoolEval NumberEval BlankEval ErrorEval]
     [org.apache.poi.ss.formula IStabilityClassifier EvaluationWorkbook EvaluationSheet EvaluationName EvaluationCell FormulaParser FormulaType]
     [org.apache.poi.ss.util CellReference AreaReference]))
@@ -175,3 +176,26 @@
   (value [v wb cref] nil))
 
 (defn fm= [formula-string] {:formula formula-string})
+
+(defn- get-cells [ss sh row]
+  (let [fc (.getFirstCellNum row)
+        lc (.getLastCellNum row)
+        rnum (.getRowNum row)]
+    (map (fn [c] {(str (CellReference/convertNumToColString c))
+                  (.valAt ss [sh rnum c])})
+         (range fc lc))))
+
+(defn read-sheet
+  "Given a SpreadSheet and a sheet index, will read the entire sheet and
+   return contents as a nested map. The outer map is keyed by the row number
+   and the inner map by the column name."
+  [^SpreadSheet ss ^java.lang.Integer idx]
+  (let [sheet (-> (.wb ss) (.getSheetAt idx))
+        fr (.getFirstRowNum sheet)
+        lr (.getLastRowNum sheet)]
+    (into {}
+          (map (fn [r]
+                 (let [row (.getRow sheet r)]
+                   ;;inc row number as it is  0 based.
+                   {(inc (.getRowNum row)) (into {} (get-cells ss idx row))}))
+               (range fr (inc lr))))))
