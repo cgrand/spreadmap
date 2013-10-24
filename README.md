@@ -10,7 +10,7 @@ persistent reactive associative structures.
 ```
 
 ### What's new in 0.1.3?
-* Due to popular demand: Java API! Call net.cgrand.SpreadMap.create(src) where src is a File, an InputStream or a String. It returns an IPersistentMap so you use .valAt and .assoc to read/update.
+* Due to popular demand: Java API! Call net.cgrand.SpreadMap.create(src) where src is a File, an InputStream or a String. It returns an Associative so you use .valAt and .assoc to read/update.
 * Fix the value of FALSE cells (returned nil instead of false).
 
 ### What's new in 0.1.2?

@@ -1,4 +1,4 @@
-(defproject net.cgrand/spreadmap "0.1.3"
+(defproject net.cgrand/spreadmap "0.1.4"
   :description "Evil project to turn excel spreadsheets in persistent reactive structures."
  ; :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
