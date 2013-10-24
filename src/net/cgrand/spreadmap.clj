@@ -144,7 +144,8 @@
   (valAt [this ref]
     (.valAt this ref nil))
   (valAt [this ref default]
-    (or (@g (canon ref wb)) default)))
+    (let [v (@g (canon ref wb))]
+      (if (nil? v) default v))))
 
 (defn- ss [^Workbook wb assocs]
   (SpreadSheet. wb assocs (delay (getter wb assocs))))
