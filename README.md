@@ -9,6 +9,10 @@ persistent reactive associative structures.
 [net.cgrand/spreadmap "0.1.2"]
 ```
 
+### What's new in 0.1.3?
+* Due to popular demand: Java API! Call net.cgrand.SpreadMap.create(src) where src is a File, an InputStream or a String. It returns an IPersistentMap so you use .valAt and .assoc to read/update.
+* Fix the value of FALSE cells (returned nil instead of false).
+
 ### What's new in 0.1.2?
 * Rewrite to get rid of the crippled ForkedEvaluator from POI.
 * It means XLSX are now supported as they should have been in the first place.
