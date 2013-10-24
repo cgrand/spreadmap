@@ -6,8 +6,11 @@ persistent reactive associative structures.
 ## Installation
 
 ```clj
-[net.cgrand/spreadmap "0.1.2"]
+[net.cgrand/spreadmap "0.1.4"]
 ```
+
+### What's new in 0.1.4?
+* The Java API with public modifiers on methods. *cough* *cough*
 
 ### What's new in 0.1.3?
 * Due to popular demand: Java API! Call net.cgrand.SpreadMap.create(src) where src is a File, an InputStream or a String. It returns an Associative so you use .valAt and .assoc to read/update.
