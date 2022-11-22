@@ -1,9 +1,9 @@
 (ns net.cgrand.spreadmap
   (:require [clojure.java.io :as io])
-  (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory CellValue DateUtil Cell]
-    [org.apache.poi.ss.formula.eval ValueEval StringEval BoolEval NumberEval BlankEval ErrorEval]
-    [org.apache.poi.ss.formula IStabilityClassifier EvaluationWorkbook EvaluationSheet EvaluationName EvaluationCell FormulaParser FormulaType]
-    [org.apache.poi.ss.util CellReference AreaReference]))
+  (:import [org.apache.poi.ss.usermodel Workbook WorkbookFactory DateUtil CellType] ;; unused: CellValue
+           [org.apache.poi.ss.formula.eval StringEval BoolEval NumberEval BlankEval] ;; unused ValueEval ErrorEval
+           [org.apache.poi.ss.formula IStabilityClassifier EvaluationWorkbook EvaluationSheet EvaluationCell FormulaParser FormulaType] ;; EvaluationName
+           [org.apache.poi.ss.util CellReference AreaReference]))
 
 (defprotocol Valueable
   (value [v wb cref]))
@@ -11,29 +11,29 @@
 (defn- canon
   "Converts to a canonical cell ref [\"sheet\" row col]"
   [ref ^Workbook wb]
-  (cond 
-    (string? ref) 
+  (cond
+    (string? ref)
     (recur
-      (if-let [name (.getName wb ref)]
-        (-> name .getRefersToFormula AreaReference. .getFirstCell)
-        (CellReference. ^String ref))
-      wb)
+     (if-let [name (.getName wb ref)]
+       (-> name .getRefersToFormula (AreaReference. (.getSpreadsheetVersion wb)) .getFirstCell)
+       (CellReference. ^String ref))
+     wb)
     (instance? CellReference ref)
     (let [^CellReference cref ref]
       [(or (.getSheetName cref) (-> wb (.getSheetAt 0) .getSheetName))
        (.getRow cref) (.getCol cref)])
     (= 3 (count ref))
     (let [[sheet row col] ref
-          sheet (if (number? sheet) (-> wb (.getSheetAt sheet) .getSheetName) sheet)] 
+          sheet (if (number? sheet) (-> wb (.getSheetAt sheet) .getSheetName) sheet)]
       [sheet row col])
     (string? (second ref))
     (let [[sheet ^String ref] ref
           cref (CellReference. ref)
-          sheet (if (number? sheet) (-> wb (.getSheetAt sheet) .getSheetName) sheet)] 
+          sheet (if (number? sheet) (-> wb (.getSheetAt sheet) .getSheetName) sheet)]
       [sheet (.getRow cref) (.getCol cref)])
     :else
     (let [[row col] ref
-          sheet (-> wb (.getSheetAt 0) .getSheetName)] 
+          sheet (-> wb (.getSheetAt 0) .getSheetName)]
       [sheet row col])))
 
 (defprotocol CellMisc
@@ -53,23 +53,23 @@
     (getSheet [this] sheet)
     (getCellType [this]
       (cond
-        (instance? Boolean v) Cell/CELL_TYPE_BOOLEAN
-        (number? v) Cell/CELL_TYPE_NUMERIC
-        (string? v) Cell/CELL_TYPE_STRING
-        (nil? v) Cell/CELL_TYPE_BLANK
-        (:formula v) Cell/CELL_TYPE_FORMULA))
+        (instance? Boolean v) CellType/BOOLEAN
+        (number? v) CellType/NUMERIC
+        (string? v) CellType/STRING
+        (nil? v) CellType/BLANK
+        (:formula v) CellType/FORMULA))
     (getNumericCellValue [this] (double v))
     (getIdentityKey [this] [idx row col])
     (getRowIndex [this] row)
     (getBooleanCellValue [this] v)
-    #_(getErrorCellValue [this] )
+    #_(getErrorCellValue [this])
     (getStringCellValue [this] v)
     (getColumnIndex [this] col)
     #_(getCachedFormulaResultType [this] (.getCachedFormulaResultType cell))
     CellMisc
     (formula-tokens [cell wb]
-      (FormulaParser/parse (:formula v) wb FormulaType/CELL 
-        idx))))
+      (FormulaParser/parse (:formula v) wb FormulaType/CELL
+                           idx))))
 
 (extend-protocol SheetMisc
   EvaluationSheet
@@ -78,20 +78,20 @@
 
 (defn- sheet [^EvaluationSheet sht idx cells]
   (reify
-     org.apache.poi.ss.formula.EvaluationSheet
-     (getCell [this row col] 
-       (if-let [kv (find cells [row col])]
-         (cell this idx row col (val kv))
-         (.getCell sht row col)))
-     SheetMisc
-     (sheet-index [this wb]
-       (sheet-index sht wb))))
+    org.apache.poi.ss.formula.EvaluationSheet
+    (getCell [this row col]
+      (if-let [kv (find cells [row col])]
+        (cell this idx row col (val kv))
+        (.getCell sht row col)))
+    SheetMisc
+    (sheet-index [this wb]
+      (sheet-index sht wb))))
 
 (defn- ^EvaluationWorkbook workbook [^EvaluationWorkbook wb assocs]
   (reify EvaluationWorkbook
     (getName [this G__3335 G__3336] (.getName wb G__3335 G__3336))
     (getName [this G__3337] (.getName wb G__3337))
-    (getSheet [this idx] 
+    (getSheet [this idx]
       (if-let [cells (some-> this (.getSheetName idx) assocs)]
         (sheet (.getSheet wb idx) idx cells)
         (.getSheet wb idx)))
@@ -107,17 +107,17 @@
 
 (defn- getter [wb assocs]
   (let [ewb (workbook
-              (cond
+             (cond
                (instance? org.apache.poi.xssf.usermodel.XSSFWorkbook wb)
                (org.apache.poi.xssf.usermodel.XSSFEvaluationWorkbook/create wb)
                (instance? org.apache.poi.hssf.usermodel.HSSFWorkbook wb)
                (org.apache.poi.hssf.usermodel.HSSFEvaluationWorkbook/create wb))
-              assocs)
+             assocs)
         evaluator (org.apache.poi.ss.formula.WorkbookEvaluator.
-                    ewb IStabilityClassifier/TOTALLY_IMMUTABLE nil)]
+                   ewb IStabilityClassifier/TOTALLY_IMMUTABLE nil)]
     (fn [[sname row col :as cref]]
       (when-let [cell (some-> ewb (.getSheet (.getSheetIndex ewb ^String sname))
-                        (.getCell row col))]
+                              (.getCell row col))]
         (value (.evaluate evaluator cell) wb cref)))))
 
 (declare ss)
@@ -125,7 +125,7 @@
 (deftype SpreadSheet [^Workbook wb assocs g]
   clojure.lang.Associative
   (assoc [this ref v]
-    (let [[sname row col] (canon ref wb)] 
+    (let [[sname row col] (canon ref wb)]
       (ss wb (assoc-in assocs [sname [row col]] v))))
   (containsKey [this ref]
     (boolean (.valAt this ref nil)))
@@ -135,8 +135,8 @@
   clojure.lang.IPersistentCollection
   (cons [this x]
     (ss wb (into assocs
-             (for [[ref v] (conj {} x)]
-               [(canon ref wb) v]))))
+                 (for [[ref v] (conj {} x)]
+                   [(canon ref wb) v]))))
   (equiv [this that]
     ; should be: same master and same assocs
     (.equals this that))
@@ -150,7 +150,7 @@
 (defn- ss [^Workbook wb assocs]
   (SpreadSheet. wb assocs (delay (getter wb assocs))))
 
-(defn spreadmap 
+(defn spreadmap
   "Creates a spreadmap from an Excel file, accepts same arguments as io/input-stream."
   [x & opts]
   (let [wb (with-open [^java.io.InputStream in
@@ -169,7 +169,7 @@
   (value [v ^Workbook wb [sname row col]]
     (let [d (.getNumberValue v)]
       (if (some-> wb (.getSheet sname) (.getRow row) (.getCell col)
-            DateUtil/isCellDateFormatted)
+                  DateUtil/isCellDateFormatted)
         (DateUtil/getJavaDate d)
         d)))
   BlankEval
